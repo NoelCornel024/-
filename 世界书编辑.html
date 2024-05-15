@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lorebook Editor</title>
+  <style>
+    body {
+      font-family: sans-serif;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h1 {
+      margin-bottom: 20px;
+    }
+
+    #file-input, #load-button {
+      margin-bottom: 10px;
+    }
+
+    #entry-list {
+      width: 80%;
+      max-width: 800px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      padding: 10px;
+      margin-bottom: 20px;
+    }
+
+    .entry-item {
+      margin-bottom: 10px;
+      padding: 10px;
+      border: 1px solid #eee;
+      border-radius: 5px;
+      background-color: #f9f9f9;
+      position: relative;
+    }
+
+    .entry-item input[type="checkbox"] {
+      margin-right: 5px;
+      /* 扩大选中按钮 */
+      width: 20px;
+      height: 20px;
+    }
+
+    .entry-item span {
+      font-weight: bold;
+    }
+
+    .entry-content {
+      margin-top: 5px;
+      display: none; /* 默认隐藏内容 */
+    }
+
+    .entry-content textarea {
+      width: 100%;
+      height: 100px;
+      resize: vertical;
+    }
+
+    .entry-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .entry-actions button {
+      padding: 5px 10px;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      background-color: #fff;
+      cursor: pointer;
+    }
+
+    .button-group button {
+      padding: 8px 15px;
+      border: none;
+      border-radius: 3px;
+      background-color: #4CAF50;
+      color: white;
+      cursor: pointer;
+      margin-bottom: 10px;
+    }
+
+    .button-group button:hover {
+      background-color: #3e8e41;
+    }
+
+    .toggle-button {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      padding: 5px 10px;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      background-color: #fff;
+      cursor: pointer;
+    }
+
+    .toggle-button:hover {
+      background-color: #eee;
+    }
+
+    /* 样式美化 */
+    #entry-list {
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+
+    .entry-item {
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    #save-notice {
+      color: green;
+      font-size: 12px;
+      margin-bottom: 10px;
+    }
+
+    #auto-save-toggle {
+      margin-left: 10px;
+    }
+
+    #edit-keysecondary-toggle {
+      margin-left: 10px;
+    }
+
+    /* 将 "展开全部" 和 "收起全部" 按钮放在同一行 */
+    #expand-all-button, #collapse-all-button {
+      display: inline-block; /* 将按钮设置为内联块元素 */
+      margin-right: 10px; /* 按钮之间添加间距 */
+    }
+
+    /* 将所有按钮放在同一行 */
+    .button-group {
+      display: flex;
+      gap: 10px;
+    }
+
+    /* 将 "显示编辑 Key 按钮" 和 "显示编辑 Keysecondary 按钮" 放在同一行 */
+    #edit-key-toggle, #edit-keysecondary-toggle {
+      display: inline-block;
+      margin-left: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Lorebook Editor</h1>
+
+    <input type="file" id="file-input" accept=".json">
+    <button id="load-button">加载 JSON 文件</button>
+
+    <div id="entry-list">
+      <input type="checkbox" id="select-all"> <label for="select-all">全选</label>
+    </div>
+
+    <div class="button-group">
+      <button id="add-button">添加条目</button>
+      <button id="delete-button">删除选中条目</button>
+      <button id="save-button">导出修改后的 JSON 文件</button>
+      <button id="expand-all-button">一键展开</button>
+      <button id="collapse-all-button">一键收起</button>
+      <button id="invert-selection">反选</button>
+    </div>
+
+    <div id="save-notice">自动保存已禁用。</div>
+    <label for="auto-save-toggle">自动保存开关:</label>
+    <input type="checkbox" id="auto-save-toggle">
+    <label for="edit-key-toggle">显示编辑 Key 按钮:</label>
+    <input type="checkbox" id="edit-key-toggle" checked>
+    <label for="edit-keysecondary-toggle">显示编辑 Keysecondary 按钮:</label>
+    <input type="checkbox" id="edit-keysecondary-toggle" checked>
+
+  </div>
+
+  <script>
+    const entryList = document.getElementById('entry-list');
+    const fileInput = document.getElementById('file-input');
+    const loadButton = document.getElementById('load-button');
+    const addButton = document.getElementById('add-button');
+    const deleteButton = document.getElementById('delete-button');
+    const saveButton = document.getElementById('save-button');
+    const saveNotice = document.getElementById('save-notice');
+    const autoSaveToggle = document.getElementById('auto-save-toggle');
+    const editKeysecondaryToggle = document.getElementById('edit-keysecondary-toggle');
+    const editKeyToggle = document.getElementById('edit-key-toggle');
+    const expandAllButton = document.getElementById('expand-all-button');
+    const collapseAllButton = document.getElementById('collapse-all-button');
+    const selectAllCheckbox = document.getElementById('select-all');
+    const invertSelectionButton = document.getElementById('invert-selection');
+
+    let jsonData = { entries: {} }; // 初始化 jsonData
+    let lastClickedCheckbox = null; // 记录上次点击的复选框
+    let isShiftPressed = false; // 跟踪 Shift 键是否按下
+
+    // 自动保存功能
+    let saveTimeout;
+    let autoSaveEnabled = false; // 初始为关闭状态
+    function autoSave() {
+      if (autoSaveEnabled) {
+        saveTimeout = setTimeout(() => {
+          saveJSON();
+          saveNotice.textContent = '已自动保存!';
+        }, 180000); // 自动保存间隔时间 (3分钟)
+      }
+    }
+
+    // 加载 JSON 文件
+    loadButton.addEventListener('click', () => {
+      const file = fileInput.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            jsonData = JSON.parse(event.target.result);
+            displayEntries();
+          } catch (error) {
+            alert('Invalid JSON file!');
+          }
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    // 显示条目
+    function displayEntries() {
+      entryList.innerHTML = ''; // 清空列表
+
+      for (const uid in jsonData.entries) {
+        const entry = jsonData.entries[uid];
+        const entryItem = document.createElement('div');
+        entryItem.classList.add('entry-item');
+        entryItem.innerHTML = `
+          <input type="checkbox" data-uid="${uid}">
+          <span>UID: ${uid}</span>
+          <span>Key: ${entry.key.join(', ')}</span>
+          <div class="entry-content" data-uid="${uid}">
+            <textarea>${entry.content}</textarea>
+          </div>
+          <div class="entry-actions">
+            ${editKeyToggle.checked ? `<button class="edit-key" data-uid="${uid}">编辑 Key</button>` : ''}
+            ${editKeysecondaryToggle.checked ? `<button class="edit-keysecondary" data-uid="${uid}">编辑 Keysecondary</button>` : ''}
+            <button class="toggle-button" data-uid="${uid}">展开/收起</button>
+          </div>
+        `;
+        entryList.appendChild(entryItem);
+      }
+
+      // 添加展开/收起按钮事件
+      const toggleButtons = entryList.querySelectorAll('.toggle-button');
+      toggleButtons.forEach(button => {
+        button.addEventListener('click', () => {
+          const uid = button.dataset.uid;
+          const content = entryList.querySelector(`.entry-content[data-uid="${uid}"]`);
+          content.style.display = content.style.display === 'none' ? 'block' : 'none';
+        });
+      });
+
+      // 添加编辑 Key 和 Keysecondary 的按钮事件
+      const editKeyButtons = entryList.querySelectorAll('.edit-key');
+      editKeyButtons.forEach(button => {
+        button.addEventListener('click', () => {
+          const uid = button.dataset.uid;
+          const keyInput = prompt('输入新的 Key (以逗号分隔):', jsonData.entries[uid].key.join(', '));
+          if (keyInput) {
+            jsonData.entries[uid].key = keyInput.split(',');
+            displayEntries();
+            autoSave();
+          }
+        });
+      });
+
+      const editKeysecondaryButtons = entryList.querySelectorAll('.edit-keysecondary');
+      editKeysecondaryButtons.forEach(button => {
+        button.addEventListener('click', () => {
+          const uid = button.dataset.uid;
+          const keysecondaryInput = prompt('输入新的 Keysecondary (以逗号分隔):', jsonData.entries[uid].keysecondary.join(', '));
+          if (keysecondaryInput) {
+            jsonData.entries[uid].keysecondary = keysecondaryInput.split(',');
+            displayEntries();
+            autoSave();
+          }
+        });
+      });
+
+      // 拖动排序 (原始方式)
+      entryList.addEventListener('mousedown', (event) => {
+        if (event.target.tagName === 'INPUT' && event.target.type === 'checkbox') {
+          const checkbox = event.target;
+          const entryItem = checkbox.closest('.entry-item');
+          const selectedEntries = Array.from(entryList.querySelectorAll('.entry-item')).filter(item => {
+            return item.querySelector('input[type="checkbox"]').checked;
+          });
+
+          if (selectedEntries.length > 0) {
+            // 开始拖动
+            const selectedEntriesIndex = selectedEntries.indexOf(entryItem);
+
+            entryList.addEventListener('mousemove', (moveEvent) => {
+              if (moveEvent.buttons !== 1) {
+                // 鼠标松开或没有按下左键
+                return;
+              }
+              // 移动条目
+              const currentIndex = Array.from(entryList.querySelectorAll('.entry-item')).indexOf(entryItem);
+
+              if (currentIndex !== selectedEntriesIndex) {
+                entryList.insertBefore(entryItem, entryList.children[currentIndex]);
+                selectedEntriesIndex = currentIndex;
+              }
+            });
+
+            // 结束拖动
+            entryList.addEventListener('mouseup', (upEvent) => {
+              entryList.removeEventListener('mousemove', () => {});
+              entryList.removeEventListener('mouseup', () => {});
+
+              // 更新 JSON 数据
+              const uids = Object.keys(jsonData.entries);
+              for (let i = 0; i < uids.length; i++) {
+                const entry = jsonData.entries[uids[i]];
+                entry.uid = i;
+              }
+              autoSave();
+            });
+          }
+        }
+      });
+    }
+
+    // 删除选中条目
+    deleteButton.addEventListener('click', () => {
+      const selectedUids = [];
+      const checkboxes = entryList.querySelectorAll('input[type="checkbox"]:checked');
+      checkboxes.forEach(checkbox => {
+        selectedUids.push(checkbox.dataset.uid);
+      });
+
+      selectedUids.forEach(uid => {
+        delete jsonData.entries[uid];
+      });
+      displayEntries();
+      autoSave();
+    });
+
+    // 添加条目
+    addButton.addEventListener('click', () => {
+      const newUid = Object.keys(jsonData.entries).length;
+      jsonData.entries[newUid] = {
+        uid: newUid,
+        key: [],
+        keysecondary: [],
+        comment: '',
+        content: '',
+        // ... 其他内容 ...
+      };
+      displayEntries();
+      autoSave();
+    });
+
+    // 导出修改后的 JSON 文件
+    saveButton.addEventListener('click', () => {
+      // 导出前，先重新排列 UID
+      const uids = Object.keys(jsonData.entries);
+      for (let i = 0; i < uids.length; i++) {
+        jsonData.entries[uids[i]].uid = i;
+      }
+      const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'modified_data.json';
+      link.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // 保存 JSON 数据
+    function saveJSON() {
+      const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'modified_data.json';
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // 自动保存开关
+    autoSaveToggle.addEventListener('change', () => {
+      autoSaveEnabled = autoSaveToggle.checked;
+      if (autoSaveEnabled) {
+        autoSave();
+        saveNotice.textContent = '自动保存已启用，数据将每 3 分钟自动保存一次。';
+      } else {
+        clearTimeout(saveTimeout);
+        saveNotice.textContent = '自动保存已禁用。';
+      }
+    });
+
+    // 显示编辑 Keysecondary 按钮开关
+    editKeysecondaryToggle.addEventListener('change', () => {
+      displayEntries();
+    });
+
+    // 显示编辑 Key 按钮开关
+    editKeyToggle.addEventListener('change', () => {
+      displayEntries();
+    });
+
+    // 一键展开
+    expandAllButton.addEventListener('click', () => {
+      entryList.querySelectorAll('.entry-content').forEach(content => {
+        content.style.display = 'block';
+      });
+    });
+
+    // 一键收起
+    collapseAllButton.addEventListener('click', () => {
+      entryList.querySelectorAll('.entry-content').forEach(content => {
+        content.style.display = 'none';
+      });
+    });
+
+    // 全选/反选功能
+    selectAllCheckbox.addEventListener('change', () => {
+      const checkboxes = entryList.querySelectorAll('input[type="checkbox"][data-uid]');
+      checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAllCheckbox.checked;
+      });
+    });
+
+    // 条目复选框的事件处理函数
+    entryList.addEventListener('click', (event) => {
+      if (event.target.tagName === 'INPUT' && event.target.type === 'checkbox' && event.target.dataset.uid) {
+        const checkbox = event.target;
+        const checkedCount = entryList.querySelectorAll('input[type="checkbox"]:checked').length;
+        selectAllCheckbox.checked = checkedCount === entryList.querySelectorAll('input[type="checkbox"][data-uid]').length;
+
+        // 更新上次点击的复选框
+        lastClickedCheckbox = checkbox;
+      }
+    });
+
+    // 多选功能
+    entryList.addEventListener('click', (event) => {
+      if (event.target.tagName === 'INPUT' && event.target.type === 'checkbox' && event.target.dataset.uid && event.shiftKey) {
+        const checkbox = event.target;
+        const checkboxes = Array.from(entryList.querySelectorAll('input[type="checkbox"][data-uid]'));
+        const startIdx = checkboxes.indexOf(lastClickedCheckbox);
+        const endIdx = checkboxes.indexOf(checkbox);
+
+        if (startIdx !== -1 && endIdx !== -1) {
+          for (let i = Math.min(startIdx, endIdx); i <= Math.max(startIdx, endIdx); i++) {
+            checkboxes[i].checked = true;
+          }
+        }
+      }
+    });
+
+    // 反选功能
+    invertSelectionButton.addEventListener('click', () => {
+      const checkboxes = entryList.querySelectorAll('input[type="checkbox"][data-uid]');
+      checkboxes.forEach(checkbox => {
+        checkbox.checked = !checkbox.checked;
+      });
+      selectAllCheckbox.checked = checkboxes.length === checkboxes.length; // 更新全选复选框状态
+    });
+
+    // 初始化页面
+    displayEntries();
+
+    // 监听 Shift 键按下和松开
+    document.addEventListener('keydown', (event) => {
+      if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
+        isShiftPressed = true;
+      }
+    });
+
+    document.addEventListener('keyup', (event) => {
+      if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
+        isShiftPressed = false;
+      }
+    });
+
+  </script>
+</body>
+</html>
